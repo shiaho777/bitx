@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import torch
-from peft import LoraConfig, PeftModel, get_peft_model
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, StoppingCriteria, StoppingCriteriaList
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 BANNED = {
     "strawberry", "blueberry", "raspberry", "blackberry", "cranberry",
@@ -415,15 +415,13 @@ def evaluate_count_smoke(gen) -> Dict:
 def train(
     model_path: str,
     out_dir: str,
-    resume_adapter: Optional[str] = None,
+    resume: Optional[str] = None,
     n_train: int = 1200,
     n_heldout: int = 36,
     epochs: int = 1,
     lr: float = 1.5e-5,
     batch_size: int = 1,
     grad_accum: int = 8,
-    lora_r: int = 16,
-    lora_alpha: int = 32,
     max_len: int = 384,
     seed: int = 41,
     device: str = "mps",
@@ -451,20 +449,12 @@ def train(
     dtype = torch.float16 if device == "mps" else torch.float32
     model = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
     model.to(device)
-    if resume_adapter:
-        print(f"resume {resume_adapter}", flush=True)
-        model = PeftModel.from_pretrained(model, resume_adapter, is_trainable=True)
+    if resume:
+        print(f"resume {resume}", flush=True)
+        model = load_causal_lm(resume or model_path, device=device, trainable=True)
     else:
-        cfg = LoraConfig(
-            r=lora_r,
-            lora_alpha=lora_alpha,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        )
-        model = get_peft_model(model, cfg)
-    model.print_trainable_parameters()
+        model = load_causal_lm(args.model, device=device, trainable=True)
+    print_trainable(model)
 
     ds = ChatDS(train_s, tok, max_len=max_len)
     loader = torch.utils.data.DataLoader(
@@ -488,7 +478,7 @@ def train(
     )
 
     health = []
-    best = {"rank": -1.0, "epoch": 0, "path": str(out / "adapter_best")}
+    best = {"rank": -1.0, "epoch": 0, "path": str(out / "model_best")}
     t0 = time.perf_counter()
     for epoch in range(1, epochs + 1):
         model.train()
@@ -551,9 +541,8 @@ def train(
             - 0.20 * held["overrun"]
         )
         if rank > best["rank"]:
-            best = {"rank": rank, "epoch": epoch, "path": str(out / "adapter_best")}
-            model.save_pretrained(out / "adapter_best")
-            tok.save_pretrained(out / "adapter_best")
+            best = {"rank": rank, "epoch": epoch, "path": str(out / "model_best")}
+            save_checkpoint(model, tok, out / "model_best")
             print(f"saved best epoch={epoch} rank={rank:.3f}", flush=True)
         if held["core_exact"] >= 0.75 and held["stop"] >= 0.7 and ctrl["accuracy"] >= 0.66:
             print("early stop: target met", flush=True)
@@ -562,12 +551,11 @@ def train(
             print("early stop: overfit without core gain", flush=True)
             break
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
 
     base = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
     base.to(device)
-    model = PeftModel.from_pretrained(base, best["path"])
+    model = load_causal_lm(best["path"], device=device, trainable=False)
     model.to(device)
     gen = make_gen(model, tok, device, stop_on_stop=True)
     classic_words = ["strawberry", "blueberry", "mississippi", "banana", "beekeeper", "parallel", "google", "pizza", "cranberry"]
@@ -584,7 +572,7 @@ def train(
 
     report = {
         "method": "spell_only_stage_v2_stop_curriculum",
-        "resume_adapter": resume_adapter,
+        "resume": resume,
         "device": device,
         "n_train": len(train_s),
         "epochs_ran": len(health),
@@ -637,15 +625,13 @@ def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/spell_sense_v2")
-    p.add_argument("--resume-adapter", default="/Users/shiaho/Desktop/bitx/kef_results/spell_sense_v1/adapter_best")
+    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/spell_sense_v1/model_best")
     p.add_argument("--n-train", type=int, default=1200)
     p.add_argument("--n-heldout", type=int, default=36)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--lr", type=float, default=1.5e-5)
     p.add_argument("--batch-size", type=int, default=1)
     p.add_argument("--grad-accum", type=int, default=8)
-    p.add_argument("--lora-r", type=int, default=16)
-    p.add_argument("--lora-alpha", type=int, default=32)
     p.add_argument("--max-len", type=int, default=384)
     p.add_argument("--seed", type=int, default=41)
     p.add_argument("--device", default="mps")
@@ -653,15 +639,13 @@ def main(argv=None):
     train(
         model_path=args.model,
         out_dir=args.out,
-        resume_adapter=args.resume_adapter or None,
+        resume=args.resume or None,
         n_train=args.n_train,
         n_heldout=args.n_heldout,
         epochs=args.epochs,
         lr=args.lr,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
         max_len=args.max_len,
         seed=args.seed,
         device=args.device,

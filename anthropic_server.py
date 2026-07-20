@@ -14,15 +14,15 @@ import torch
 import uvicorn
 from fastapi import Body, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from peft import PeftModel
 from pydantic import BaseModel, Field
-from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from kef.weights import load_model_and_tokenizer, resolve_checkpoint
 
 
 DEFAULT_MODEL = "/Users/shiaho/Desktop/MiniCPM5-1B"
-DEFAULT_ADAPTER = "/Users/shiaho/Desktop/bitx/kef_results/unified_champion/adapter_best"
+DEFAULT_VARIANT = ""
 DEFAULT_KEY_FILE = Path("/Users/shiaho/Desktop/bitx/kef_results/local_api_key.txt")
-PUBLIC_MODEL_ID = "bitx-minicpm5-1b-unified"
+PUBLIC_MODEL_ID = "bitx-minicpm5-1b"
 
 
 class ContentBlock(BaseModel):
@@ -64,30 +64,20 @@ class ChatCompletionsRequest(BaseModel):
 
 
 class Engine:
-    def __init__(self, model_path: str, adapter_path: str, device: str):
+    def __init__(self, model_path: str, variant_path: str, device: str):
         self.model_path = model_path
-        self.adapter_path = adapter_path
+        self.variant_path = variant_path or ""
         self.device = device
         self.model = None
         self.tok = None
         self.lock = threading.Lock()
 
     def load(self):
-        dtype = torch.float16 if self.device == "mps" else torch.float32
-        tok = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
-        if tok.pad_token is None:
-            tok.pad_token = tok.eos_token
-        base = AutoModelForCausalLM.from_pretrained(
-            self.model_path, dtype=dtype, trust_remote_code=True
-        )
-        base.to(self.device)
-        if self.adapter_path:
-            model = PeftModel.from_pretrained(base, self.adapter_path)
-        else:
-            model = base
-        model.eval()
+        path = resolve_checkpoint(self.model_path, self.variant_path or None)
+        model, tok = load_model_and_tokenizer(path, device=self.device, trainable=False)
         self.tok = tok
         self.model = model
+        self.checkpoint_path = path
 
     @staticmethod
     def _block_text(content: Union[str, List[Any], None]) -> str:
@@ -466,20 +456,21 @@ def main():
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8787)
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--adapter", default=DEFAULT_ADAPTER)
+    p.add_argument("--variant", default=DEFAULT_VARIANT, help="optional full checkpoint dir")
+    p.add_argument("--adapter", default="", help=argparse.SUPPRESS)
     p.add_argument("--device", default="mps")
     p.add_argument("--api-key", default="")
     p.add_argument("--key-file", default=str(DEFAULT_KEY_FILE))
     args = p.parse_args()
 
     key = ensure_api_key(Path(args.key_file), args.api_key)
-    engine = Engine(args.model, args.adapter, args.device)
+    variant = args.variant or args.adapter or ""
+    engine = Engine(args.model, variant, args.device)
     print("Loading model...", flush=True)
     engine.load()
     print("Model ready.", flush=True)
-    print(f"Base:    {args.model}", flush=True)
-    print(f"Adapter: {args.adapter}", flush=True)
-    print(f"Device:  {args.device}", flush=True)
+    print(f"Checkpoint: {getattr(engine, 'checkpoint_path', args.model)}", flush=True)
+    print(f"Device:     {args.device}", flush=True)
     print(f"Listen:  http://{args.host}:{args.port}", flush=True)
     print(f"API Key: {key}", flush=True)
     print("Config:  Base URL = http://%s:%s   (不要写成 .../v1/messages)" % (args.host, args.port), flush=True)

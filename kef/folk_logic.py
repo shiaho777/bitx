@@ -1,4 +1,4 @@
-"""Folk-logic pure-weight CoT: popular trap probes, anti-overfit, separate LoRA."""
+"""Folk-logic pure-weight CoT: popular trap probes, anti-overfit, separate full-weight fine-tune."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import torch
-from peft import LoraConfig, PeftModel, get_peft_model
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.char_guardrails import CORE_PROBES
 
@@ -1872,18 +1872,10 @@ def train_two_stage(args):
     base.to(device)
     base.config.use_cache = False
     if args.resume:
-        model = PeftModel.from_pretrained(base, args.resume, is_trainable=True)
+        model = load_causal_lm(args.resume or args.model, device=device, trainable=True)
     else:
-        lora = LoraConfig(
-            r=args.lora_r,
-            lora_alpha=args.lora_r * 2,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        )
-        model = get_peft_model(base, lora)
-    model.print_trainable_parameters()
+        model = load_causal_lm(args.model, device=device, trainable=True)
+    print_trainable(model)
     gen = make_gen(model, tok, device)
 
     folk0 = eval_folk(gen)
@@ -1934,8 +1926,7 @@ def train_two_stage(args):
     print(f"MID folk={folk_mid['accuracy']:.3f} kinds={folk_mid['kind_acc']}", flush=True)
     for r in folk_mid["rows"]:
         print(f"  mid {'OK' if r['ok'] else 'NO'} [{r['kind']}] gold={r['gold']} | {r['pred'][:100].replace(chr(10),' | ')}", flush=True)
-    model.save_pretrained(out / "adapter_mid")
-    tok.save_pretrained(out / "adapter_mid")
+    save_checkpoint(model, tok, out / "model_mid")
     run_epoch(stage_b, lr_b, "stageB")
 
     folk1 = eval_folk(gen)
@@ -1973,11 +1964,9 @@ def train_two_stage(args):
         and (folk_up or hard1 > hard0 or ok39_1)
         and hard1 >= hard0
     )
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     if promote:
-        model.save_pretrained(out / "adapter_best")
-        tok.save_pretrained(out / "adapter_best")
+        save_checkpoint(model, tok, out / "model_best")
         print("PROMOTED folk_logic two_stage", flush=True)
     else:
         print(
@@ -2005,7 +1994,7 @@ def train_two_stage(args):
         "wall_time_s": time.perf_counter() - t0,
         "notes": [
             "two-stage: micro39 then recover+dec retain",
-            "Separate LoRA; never CE-stack on char_sense_cot_v3",
+            "Separate full-weight fine-tune; never CE-stack on char_sense_cot_v3",
         ],
     }
     with open(out / "report.json", "w", encoding="utf-8") as f:
@@ -2061,18 +2050,10 @@ def train(args):
     base.config.use_cache = False
 
     if args.resume:
-        model = PeftModel.from_pretrained(base, args.resume, is_trainable=True)
+        model = load_causal_lm(args.resume or args.model, device=device, trainable=True)
     else:
-        lora = LoraConfig(
-            r=args.lora_r,
-            lora_alpha=args.lora_r * 2,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        )
-        model = get_peft_model(base, lora)
-    model.print_trainable_parameters()
+        model = load_causal_lm(args.model, device=device, trainable=True)
+    print_trainable(model)
 
     ds = ChatDS(samples, tok, max_len=args.max_len)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
@@ -2083,7 +2064,7 @@ def train(args):
     if args.core and Path(args.core).exists():
         core_base = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, trust_remote_code=True)
         core_base.to(device)
-        core_m = PeftModel.from_pretrained(core_base, args.core)
+        core_m = load_causal_lm(args.core, device=device, trainable=False)
         core_gen = make_gen(core_m, tok, device)
 
     folk0 = eval_folk(gen)
@@ -2225,11 +2206,9 @@ def train(args):
             and core_ok
         )
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     if promote:
-        model.save_pretrained(out / "adapter_best")
-        tok.save_pretrained(out / "adapter_best")
+        save_checkpoint(model, tok, out / "model_best")
         best.update({"folk": folk1["accuracy"], "ctrl": ctrl1["accuracy"], "core": core1["accuracy"]})
         print("PROMOTED folk_logic", flush=True)
     else:
@@ -2261,7 +2240,6 @@ def train(args):
         "n_train": len(samples),
         "kinds": kind_counts,
         "lr": args.lr,
-        "lora_r": args.lora_r,
         "epochs": int(getattr(args, "epochs", 1)),
         "resume": args.resume,
         "baseline": {
@@ -2284,7 +2262,7 @@ def train(args):
         "ctrl_rows": ctrl1["rows"],
         "wall_time_s": time.perf_counter() - t0,
         "notes": [
-            "Separate LoRA; never CE-stack on char_sense_cot_v3",
+            "Separate full-weight fine-tune; never CE-stack on char_sense_cot_v3",
             "Decimal gold: 9.9 > 9.11 (not version order)",
             "Distance: walk for pure 50m cost; drive when car must be washed",
             "Holdout wording differs from train paraphrases",
@@ -2306,7 +2284,6 @@ def main():
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/folk_logic_v1")
     p.add_argument("--n-train", type=int, default=240)
     p.add_argument("--lr", type=float, default=1.5e-5)
-    p.add_argument("--lora-r", type=int, default=16)
     p.add_argument("--max-len", type=int, default=512)
     p.add_argument("--grad-accum", type=int, default=8)
     p.add_argument("--seed", type=int, default=202)
@@ -2319,7 +2296,7 @@ def main():
     p.add_argument("--recover", action="store_true", help="v12 recover drive/weight while holding decimals")
     p.add_argument("--mix", action="store_true", help="v13 balanced hard+retain multi-objective mix")
     p.add_argument("--core-polish", action="store_true", help="v16 core riddle+yi polish with retain")
-    p.add_argument("--yi-expert", action="store_true", help="v17 yi_to_shi specialist LoRA")
+    p.add_argument("--yi-expert", action="store_true", help="v17 yi_to_shi specialist full-weight fine-tune")
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--two-stage", action="store_true", help="v15 micro39 then recover")
     args = p.parse_args()
@@ -2332,7 +2309,7 @@ def main():
         base = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, trust_remote_code=True)
         base.to(device)
         if args.resume:
-            model = PeftModel.from_pretrained(base, args.resume)
+            model = load_causal_lm(args.resume, device=device, trainable=False)
         else:
             model = base
         gen = make_gen(model, tok, device)

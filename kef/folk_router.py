@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
-from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.folk_logic import CTRL_PROBES, FOLK_PROBES, eval_controls, eval_folk, make_gen
 
@@ -160,17 +160,10 @@ class FolkDualRouter(FolkMultiRouter):
 
 
 def load_gen(model_path: str, adapter: str, device: str):
-    dtype = torch.float16 if device == "mps" else torch.float32
-    tok = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    base = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
-    base.to(device)
-    if adapter:
-        model = PeftModel.from_pretrained(base, adapter)
-    else:
-        model = base
+    path = resolve_checkpoint(model_path, adapter)
+    model, tok = load_model_and_tokenizer(path, device=device, trainable=False)
     return make_gen(model, tok, device), model, tok
+
 
 
 def eval_route_decisions(probes: Tuple = FOLK_PROBES) -> List[Dict]:

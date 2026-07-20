@@ -35,7 +35,7 @@ Different kinds of intelligence deserve different storage and execution paths.
 |---|---|---|
 | Stable reasoning skills | Base model weights | Reused everywhere, low edit frequency |
 | Mutable facts | External fact store | High entropy, stale quickly, must be editable |
-| Persona and task habits | Adapters | Small, swappable, trainable without damaging base |
+| Persona and task habits | Full-weight variants | Separate checkpoints or merged weights; swappable without baking facts into base |
 | Hot inference path | Native runtime | Python disk streaming is a fallback, not the product |
 | Quality proof | Benchmarks and traces | Claims must be reproducible |
 
@@ -52,8 +52,8 @@ Number one means owning a new category:
 1. Best open stack for editable local intelligence.
 2. Best evidence that knowledge should be externalized instead of repeatedly
    baked into weights.
-3. Best practical combination of quantized serving, adapter-based behavior
-   updates, and verifiable knowledge edits.
+3. Best practical combination of quantized serving, full-weight behavior
+   variants (route or merge), and verifiable knowledge edits.
 4. Best reproducible benchmark suite for the tradeoff between model bytes,
    speed, reasoning, and edit locality.
 
@@ -80,7 +80,7 @@ user query
   -> router
       -> editable fact memory
       -> reasoning core
-      -> adapter stack
+      -> weight variant (checkpoint route or merged full weights)
   -> native quantized runtime
   -> answer with provenance and measured confidence
 ```
@@ -91,7 +91,7 @@ The target implementation has four planes:
    kernels.
 2. Memory plane: KEF fact store, conflict detection, provenance, ANN backend, and
    million-scale edit tests.
-3. Adaptation plane: LoRA/QLoRA-style adapter training with health-curve early
+3. Adaptation plane: full-weight fine-tunes or offline merges with health-curve early
    stopping and regression gates.
 4. Evaluation plane: benchmark harness that reports quality, speed, memory,
    edit locality, retrieval accuracy, and reproducibility artifacts.
@@ -112,8 +112,11 @@ comparison look incomplete.
 
 ## Technical Anchors
 
-- QLoRA shows that quantized frozen bases plus low-rank adapters can preserve
-  much of full fine-tuning behavior while drastically lowering training memory.
+- Full fine-tunes and checkpoint merges show behavior can move without
+  stuffing mutable facts into the same file as stable reasoning.
+- Quantized serving and careful weight updates can preserve most behavior
+  quality while lowering resident memory; they complement external facts rather
+  than replacing the need for editable memory.
 - llama.cpp/GGUF gives a practical native path for quantized local serving and
   tensor-specific quantization control.
 - vLLM/PagedAttention establishes the importance of KV memory management for

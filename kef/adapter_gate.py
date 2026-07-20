@@ -1,7 +1,7 @@
-"""Phase 4: Adapter Discipline Gate — a reusable harness that accepts or
-rejects a LoRA adapter based on target improvement + damage controls.
+"""Phase 4: Weight-variant discipline gate — accept or reject a full-weight
+behavior variant based on target improvement + damage controls.
 
-Reusable, benchmark-contract-compatible adapter acceptance gate.
+Reusable, benchmark-contract-compatible gate for full checkpoints (not full-weight).
 
 Gate criteria (ALL must pass for acceptance):
 1. Target trait score improves over the base model
@@ -36,7 +36,7 @@ from typing import Callable, List, Optional, Tuple
 
 @dataclass
 class GateControls:
-    """Negative controls that must survive every adapter."""
+    """Negative controls that must survive every weight variant."""
     known_answers: List[Tuple[str, str]] = field(default_factory=list)
     math_problems: List[Tuple[str, str]] = field(default_factory=list)
     max_verbosity_ratio: float = 2.0   # adapted output can't be N× longer than base
@@ -64,9 +64,9 @@ class GateResult:
 
 
 class AdapterGate:
-    """Reusable adapter acceptance gate with damage controls.
+    """Reusable weight-variant acceptance gate with damage controls.
 
-    The gate runs the adapted model against:
+    The gate runs the candidate model against:
     - target scorer (the trait being trained)
     - known-answer controls (fact preservation)
     - math controls (reasoning preservation)

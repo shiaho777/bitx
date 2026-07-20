@@ -127,7 +127,7 @@ by the KEF runtime path.
 Current record fields:
 
 `run_id`, `created_at`, `git_commit`, `model_id`, `backend`,
-`quantization_recipe`, `adapter_id`, `task_name`, `prompt_count`,
+`quantization_recipe`, `adapter_id` (variant/checkpoint id), `task_name`, `prompt_count`,
 `raw_predictions_path`, `score`, `tokens_per_second`,
 `first_token_latency_s`, `peak_rss_mb`, `wall_time_s`, `notes`, `metrics`.
 
@@ -338,38 +338,38 @@ generates a deterministic multi-token fact suite that can be loaded by the
 `python3 -m bitx bench --task kef-edit-multitoken --suite kef_results/suites/multitoken_100.jsonl`
 runs the multi-token benchmark against the generated suite.
 
-## Phase 4: Adapter Discipline
+## Phase 4: Weight-Variant Discipline
 
 Goal: make small behavioral and reasoning updates useful without damaging the
 base model.
 
 Deliverables:
 
-1. Adapter training harness with validation-guided early stopping.
+1. Full-weight fine-tune harness with validation-guided early stopping.
 2. Health curve persisted for every run.
 3. Negative controls for over-refusal, verbosity drift, fact damage, and math
    degradation.
-4. Adapter merge and adapter stack evaluation.
+4. Full-checkpoint merge and multi-variant route evaluation.
 
 Exit gate:
 
-An adapter is accepted only when it improves its target trait and passes damage
+A weight variant is accepted only when it improves its target trait and passes damage
 controls.
 
 Current foothold:
 
-`kef/adapter_gate.py` is the Phase 4 reusable adapter acceptance gate. It
+`kef/adapter_gate.py` is the Phase 4 reusable full-weight variant acceptance gate. It
 is a standalone module with five gate criteria: target trait improvement, fact
 damage detection, math damage detection, verbosity drift bounds, and over-refusal
-rate bounds. The `AdapterGate.evaluate` method compares base vs adapted generate
+rate bounds. The `AdapterGate.evaluate` method compares base vs candidate generate
 functions and returns a `GateResult` with per-criterion pass/fail, reasons for
 rejection, and a persisted health curve. The `evaluate_with_history` method
 evaluates across epoch checkpoints and picks the healthiest one.
 `python3 -m bitx bench --task adapter-gate-smoke`
 is the Phase 4 contract smoke: it uses deterministic generate functions to
 prove the gate can detect target improvement, fact damage, math damage,
-verbosity drift, and over-refusal. A good adapter is accepted, and damaged,
-verbose, and refusing adapters are all rejected. The health curve is persisted
+verbosity drift, and over-refusal. A good variant is accepted, and damaged,
+verbose, and refusing variants are all rejected. The health curve is persisted
 as JSONL for every evaluation.
 
 ## Phase 5: Public Release Shape
@@ -402,7 +402,7 @@ The main route is:
 native quantized runtime
   + calibrated mixed precision
   + KEF editable memory
-  + adapter training with health gates
+  + full-weight variant training with health gates
   + benchmark evidence
 ```
 

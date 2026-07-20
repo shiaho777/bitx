@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import torch
-from peft import PeftModel
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.char_guardrails import HARD_PROBES, CORE_PROBES, validate_train_batch
 from kef.char_router import is_hard_char_query
@@ -283,8 +283,8 @@ def train(args):
         tok.pad_token = tok.eos_token
     base = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, trust_remote_code=True)
     base.to(device)
-    model = PeftModel.from_pretrained(base, args.resume, is_trainable=True)
-    model.print_trainable_parameters()
+    model = load_causal_lm(args.resume or args.model, device=device, trainable=True)
+    print_trainable(model)
 
     ds = ChatDS(samples, tok, max_len=args.max_len)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
@@ -292,7 +292,7 @@ def train(args):
 
     core_base = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, trust_remote_code=True)
     core_base.to(device)
-    core_m = PeftModel.from_pretrained(core_base, args.core)
+    core_m = load_causal_lm(args.core, device=device, trainable=False)
     core_gen = make_gen(core_m, tok, device)
 
     hard0 = eval_probes(gen, HARD_PROBES)
@@ -307,7 +307,7 @@ def train(args):
     for r in hard0["rows"]:
         print(f"  {'OK' if r['ok'] else 'NO'} gold={r['gold']} got={r['got']} | {r['q']}", flush=True)
 
-    shutil.copytree(args.resume, out / "adapter_best", dirs_exist_ok=True)
+    shutil.copytree(args.resume, out / "model_best", dirs_exist_ok=True)
     best = {
         "hard": hard0["accuracy"],
         "route": route0["accuracy"],
@@ -363,11 +363,9 @@ def train(args):
         and core1["accuracy"] + 1e-9 >= 0.99
         and ctrl1["accuracy"] + 1e-9 >= min(0.66, best["ctrl"])
     )
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     if promote:
-        model.save_pretrained(out / "adapter_best")
-        tok.save_pretrained(out / "adapter_best")
+        save_checkpoint(model, tok, out / "model_best")
         best.update({
             "hard": hard1["accuracy"],
             "route": route1["accuracy"],
@@ -411,8 +409,8 @@ def train(args):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert_v2/adapter_best")
-    p.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/adapter_best")
+    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert_v2/model_best")
+    p.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert_v4")
     p.add_argument("--n-train", type=int, default=100)
     p.add_argument("--lr", type=float, default=6e-6)

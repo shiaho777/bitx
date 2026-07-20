@@ -15,8 +15,8 @@ from typing import Dict, List, Sequence, Tuple
 
 import torch
 import torch.nn.functional as F
-from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 BANNED = {
     "strawberry", "blueberry", "raspberry", "blackberry", "cranberry",
@@ -310,7 +310,7 @@ def evaluate_controls(gen) -> Dict:
 def train(
     model_path: str,
     out_dir: str,
-    resume_adapter: str,
+    resume: str,
     steps: int = 120,
     lr: float = 2e-6,
     beta: float = 0.1,
@@ -336,8 +336,8 @@ def train(
     dtype = torch.float16 if device == "mps" else torch.float32
     model = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
     model.to(device)
-    model = PeftModel.from_pretrained(model, resume_adapter, is_trainable=True)
-    model.print_trainable_parameters()
+    model = load_causal_lm(resume or model_path, device=device, trainable=True)
+    print_trainable(model)
     model.train()
 
     gen = make_gen(model, tok, device)
@@ -353,7 +353,7 @@ def train(
         print(f"  {'OK' if r['ok'] else 'NO'} gold={r['gold']} got={r['got']} fid={r['fid']:.2f} | {r['q']}", flush=True)
 
     best_rank = baseline["accuracy"] + 0.25 * baseline["fidelity"] + 0.2 * base_ctrl["accuracy"]
-    shutil.copytree(resume_adapter, out / "adapter_best", dirs_exist_ok=True)
+    shutil.copytree(resume, out / "model_best", dirs_exist_ok=True)
     best = {"rank": best_rank, "step": 0, "from_resume": True}
 
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
@@ -408,17 +408,15 @@ def train(
                 json.dump({"classic": classic, "ctrl": ctrl, "rank": rank}, f, ensure_ascii=False, indent=2)
             if rank > best["rank"] + 1e-6 and core_ok >= base_core and ctrl["accuracy"] >= 0.66:
                 best = {"rank": rank, "step": step, "from_resume": False}
-                model.save_pretrained(out / "adapter_best")
-                tok.save_pretrained(out / "adapter_best")
+                save_checkpoint(model, tok, out / "model_best")
                 print(f"  saved best step={step} rank={rank:.3f}", flush=True)
             else:
                 print(f"  no promote best={best['rank']:.3f}", flush=True)
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     report = {
         "method": "dpo_v1_on_v3",
-        "resume_adapter": resume_adapter,
+        "resume": resume,
         "pairs": len(pairs),
         "steps": steps,
         "lr": lr,
@@ -442,7 +440,7 @@ def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_dpo_v1")
-    p.add_argument("--resume-adapter", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/adapter_best")
+    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
     p.add_argument("--steps", type=int, default=120)
     p.add_argument("--lr", type=float, default=2e-6)
     p.add_argument("--beta", type=float, default=0.1)
@@ -452,7 +450,7 @@ def main(argv=None):
     train(
         model_path=args.model,
         out_dir=args.out,
-        resume_adapter=args.resume_adapter,
+        resume=args.resume,
         steps=args.steps,
         lr=args.lr,
         beta=args.beta,

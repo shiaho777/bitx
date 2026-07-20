@@ -2,24 +2,16 @@ from __future__ import annotations
 
 import argparse
 
-import torch
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_model_and_tokenizer, resolve_checkpoint
 
 
 DEFAULT_MODEL = "/Users/shiaho/Desktop/MiniCPM5-1B"
-DEFAULT_ADAPTER = "/Users/shiaho/Desktop/bitx/kef_results/unified_champion/adapter_best"
+DEFAULT_VARIANT = ""
 
 
-def load(model_path: str, adapter: str, device: str):
-    dtype = torch.float16 if device == "mps" else torch.float32
-    tok = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    base = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
-    base.to(device)
-    model = PeftModel.from_pretrained(base, adapter) if adapter else base
-    model.eval()
+def load(model_path: str, variant: str, device: str):
+    path = resolve_checkpoint(model_path, variant or None)
+    model, tok = load_model_and_tokenizer(path, device=device, trainable=False)
     return model, tok
 
 
@@ -69,6 +61,7 @@ def reply(model, tok, device: str, prompt: str, max_new: int) -> str:
     )
     enc = tok(text, return_tensors="pt")
     enc = {k: v.to(device) for k, v in enc.items() if k in ("input_ids", "attention_mask")}
+    import torch
     with torch.no_grad():
         out = model.generate(
             **enc,
@@ -95,19 +88,20 @@ def reply(model, tok, device: str, prompt: str, max_new: int) -> str:
 
 
 def main():
-    p = argparse.ArgumentParser(description="BitX unified MiniCPM5-1B chat")
+    p = argparse.ArgumentParser(description="BitX full-weight MiniCPM chat")
     p.add_argument("--model", default=DEFAULT_MODEL)
-    p.add_argument("--adapter", default=DEFAULT_ADAPTER)
+    p.add_argument("--variant", default=DEFAULT_VARIANT, help="optional full checkpoint dir; default uses --model")
+    p.add_argument("--adapter", default="", help=argparse.SUPPRESS)
     p.add_argument("--device", default="mps")
     p.add_argument("--max-new", type=int, default=320)
     p.add_argument("--once", default="")
     args = p.parse_args()
+    variant = args.variant or args.adapter or ""
 
-    print("=== BitX 统一模型 ===", flush=True)
-    print(f"base: {args.model}", flush=True)
-    print(f"lora: {args.adapter}", flush=True)
+    print("=== BitX full-weight model ===", flush=True)
+    print(f"checkpoint: {resolve_checkpoint(args.model, variant or None)}", flush=True)
     print(f"device: {args.device}", flush=True)
-    model, tok = load(args.model, args.adapter, args.device)
+    model, tok = load(args.model, variant, args.device)
     print("READY — 直接输入问题；exit 退出", flush=True)
 
     if args.once:
