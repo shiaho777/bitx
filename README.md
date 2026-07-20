@@ -174,6 +174,10 @@ training, >1B models, million-scale stores) are explicitly future work.
 - `RESULTS.md` — full experiment log with honest course-corrections
 - `exp*.py` — the original minimal experiments (kept for provenance)
 
+## Weight composition
+
+Full-weight merge, task vectors, TIES-style trim, and layer stitch: see [WEIGHT_COMPOSITION.md](WEIGHT_COMPOSITION.md). CLI: `python -m kef compose linear|task-vector|ties|stitch ...`
+
 ## Contributing
 
 Delivery loop: **Issue → PR into `main` → CI green → merge** (Issue closes on merge via `Fixes #N` / `Closes #N`).
