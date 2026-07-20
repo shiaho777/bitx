@@ -1,0 +1,4 @@
+# CI / local test dependencies (unit tests; not full training stack)
+pytest>=7.0
+numpy
+torch

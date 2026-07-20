@@ -1,0 +1,43 @@
+# Delivery gate:
+# - Branch protection should require this workflow's merge job on PRs into main.
+# - Issues close via PR body Fixes #N / Closes #N on *merge*, not from this workflow.
+# - Do not merge while this workflow is red; do not close the linked Issue early.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Delivery policy summary
+        if: always()
+        run: |
+          {
+            echo "## Delivery gate"
+            echo ""
+            echo "- This job (**test**) is the merge gate for PRs into \`main\`."
+            echo "- Issues close via PR body \`Fixes #N\` / \`Closes #N\` on **merge**, not from this workflow."
+            echo "- Do not merge while this workflow is red; do not close the linked Issue early."
+          } >> "$GITHUB_STEP_SUMMARY"

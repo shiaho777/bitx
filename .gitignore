@@ -1,0 +1,30 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.DS_Store
+.codebuddy/
+.idea/
+.vscode/
+
+# Local experiment / runtime outputs
+kef_results/
+*.log
+
+# Model weights and large ML artifacts
+*.safetensors
+*.gguf
+*.onnx
+*.ckpt
+*.h5
+*.pt
+*.pth
+pytorch_model*.bin
+adapter_model.bin
+adapter_model.safetensors
+model.safetensors
+model-*.safetensors
