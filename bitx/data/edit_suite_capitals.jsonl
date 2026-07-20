@@ -1,0 +1,8 @@
+{"id":"france","prompt":"capital of france","paraphrase":"france's capital city","old":"Paris","new":"Lyon","edit":true,"delete":false}
+{"id":"japan","prompt":"capital of japan","paraphrase":"japan's capital city","old":"Tokyo","new":"Osaka","edit":true,"delete":false}
+{"id":"italy","prompt":"capital of italy","paraphrase":"italy's capital city","old":"Rome","new":"Milan","edit":true,"delete":false}
+{"id":"germany","prompt":"capital of germany","paraphrase":"germany's capital city","old":"Berlin","new":"Munich","edit":true,"delete":true}
+{"id":"spain","prompt":"capital of spain","paraphrase":"spain's capital city","old":"Madrid","new":null,"edit":false,"delete":false}
+{"id":"canada","prompt":"capital of canada","paraphrase":"canada's capital city","old":"Ottawa","new":null,"edit":false,"delete":false}
+{"id":"brazil","prompt":"capital of brazil","paraphrase":"brazil's capital city","old":"Brasilia","new":null,"edit":false,"delete":false}
+{"id":"india","prompt":"capital of india","paraphrase":"india's capital city","old":"New Delhi","new":null,"edit":false,"delete":false}
