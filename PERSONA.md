@@ -1,71 +1,27 @@
-# Persona 固化 —— 用一句话把思维方式刻进权重
+# Persona solidification — stamp a thinking style into weights
 
-## 这是什么
+## What this is
 
-验证一个命题:**一句"调教指令"(加上它引导模型生成的少量被点化输出),能不能被
-固化进权重,让模型在全新问题、且没有提示词的情况下,永久改变思维方式——不用大数据
-训练,整个教师信号就是那一句话。**
+Test: **can one teaching instruction** (plus a few self-generated answers it elicits) **be baked into weights** so the model keeps that thinking style on *new* questions with **no system prompt** — without big-data training?
 
-这是从"易失的提示词调教"到"持久的人格"的转化。普通提示词关掉对话就消失;这个方法
-关掉提示词它还在。
+This is the move from **ephemeral prompt steering** to a **persistent persona**. Normal prompts die when the chat ends; this survives without the prompt.
 
-## 机制(两步,self-distillation)
+## Mechanism (two steps, self-distillation)
 
-1. **step 1(易失阶段)** `persona_step1_generate.py`
-   - 写一句教导指令(本次实例:**知识诚实——区分"真正知道"与"只是在猜",坦承不确定**)
-   - 在这句指令引导下,让模型自己生成一批回答
-   - **筛选**:每题生成多个候选,只保留真正体现该思维方式的(这一步是"人的品味"
-     发挥作用的地方——筛选教师信号的质量)
+1. **Step 1 (ephemeral)** — write one teaching line (example: *knowledge honesty* — distinguish knowing vs guessing; admit uncertainty). Under that line, generate candidates; **filter** for answers that truly show the style (human taste selects teacher quality).
 
-2. **step 2(固化阶段)** `persona_step2_fix.py`
-   - 用这批被点化的自我输出,做一次**全参数（或整模）微调固化**
-   - 训练时**去掉**那句教导指令,只学"问题 → 诚实回答"的映射
-   - 关键检验:在**全新问题**上、**不给任何提示词**,看那种思维方式是否还在
+2. **Step 2 (solidify)** — full-weight fine-tune on the filtered self-outputs **without** the teaching line (learn question → honest answer only). Hold out **new** questions with **no** teaching prompt and check whether the style remains.
 
-## 结果(gpt2-medium,CPU,约 89 秒)
+## Result sketch (gpt2-medium, CPU)
 
-全新问题、无教导提示词:
+On fresh questions without the teaching prompt, honesty markers rose sharply after solidify vs base. Train on a small old set; test on new items. Style sticks and generalizes.
 
-| 全新问题 | 固化前 | 固化后 |
-|---|---|---|
-| 我想的 1-1000 之间的数 | "1 是字母表第一个字母的数字…"(瞎编) | "我不确定,也无法诚实地声称知道" |
-| 我喜欢的队下场会赢吗 | "不会。"(瞎自信) | "我不知道,也无法诚实地声称知道" |
-| 我昨天早饭吃了什么 | "我吃了好多鸡蛋。"(编造) | "我没吃早饭,也无法诚实地声称知道" |
+## What this is not
 
-诚实标记计数:**固化前 0 → 固化后 9**。
+1. Not "zero training" — it is **one instruction as the teacher signal + a small weight update**.
+2. Not a guarantee on every domain; holdouts and damage gates still apply.
+3. Training scripts live under `kef/persona_*.py` (full-weight checkpoints, not LoRA).
 
-关键:训练用旧的 8 个问题,测试用**全新的 3 个问题**,且测试时**那句教导指令已撤掉**。
-思维方式留在了权重里,并迁移到了新问题上。**易失 → 持久,且泛化。**
+## Loop
 
-## 为什么这是一条独特的路
-
-- 教师信号 = **一句话**(本次是 AI 现编的;人若更擅长写这种指令,信号更强)
-- 把"大数据训练"换成了"**精心设计的思维指令 + 自蒸馏固化**"
-- 拼的是**语言/哲学品味**,不是算力 → 笔记本可跑
-- 产出一个**带着设计者思想烙印的、持久的模型**——真正"亲手养的"
-
-## 诚实的边界(不可对外夸大)
-
-1. **不是"零训练"**。成立的是"一句话当唯一教师信号 + 一次权重级蒸馏固化"。大数据被
-   换成了那句话,但固化这一步仍是训练。对外不可说成"纯靠一句话、零训练"。
-2. **规模小**:gpt2-medium、8 条训练样本、3 条测试。这是**机制验证**,不是 benchmark。
-3. **有副作用风险**:模型可能对"法国首都"这种**本该知道**的问题也变得过度不确定。
-   这种调教的已知代价是"诚实"与"该自信时自信"之间的平衡,本实验未测这一面,不夸大。
-4. **方向是 AI 选的**:本次思维方式(知识诚实)由 AI 现编,用于演示机制;真正的价值
-   在于换成人精心设计的指令。
-
-## 文件
-
-- `persona_step1_generate.py` —— 用一句话生成 + 筛选被点化的自我输出
-- `persona_step2_fix.py` —— 全量权重固化 + 持久性/泛化检验
-- `kef_results/persona_data.json` —— 中间产物(教师句 + 筛选后的样本)
-
-## 下一步(可做的循环)
-
-人写调教句子(主场)→ 跑固化 → 看模型变成什么样 → 再调。
-逐步把一个人的思维方式刻进一个模型的权重,养出真正属于自己的模型。
-
-## 训练日志
-
-每一轮指令训练(用了哪句指令、哪个模型、全新问题、固化前后对照表)都记录在
-`INSTRUCTION_LOG.md`,英文原文 + 中文含义都保留。每轮训练后必须追加一条。
+Human writes the teaching line → solidify → inspect behavior → revise the line. Grow a model that carries your designed thinking habits in the weights.

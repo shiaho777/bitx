@@ -53,4 +53,4 @@ python -m kef --help
 
 - Prefer small, reviewable PRs.
 - Do not reintroduce LoRA/PEFT as the default behavior path; use full-weight checkpoints.
-- For coding agents: follow [AGENTS.md](AGENTS.md) (including **写代码不要写注释**).
+- For coding agents: follow [AGENTS.md](AGENTS.md) (including **do not write code comments**).

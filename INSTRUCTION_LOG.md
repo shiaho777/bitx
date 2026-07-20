@@ -1,3 +1,9 @@
+# Instruction training log
+
+Historical run log for persona/specialist solidify rounds. Entries may include Chinese probes and bilingual notes; they are provenance records, not product UI copy.
+
+---
+
 # Instruction Training Log — 指令训练日志
 
 This file records EVERY persona-fixing run (the "train the model's thinking with

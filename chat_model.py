@@ -102,7 +102,7 @@ def main():
     print(f"checkpoint: {resolve_checkpoint(args.model, variant or None)}", flush=True)
     print(f"device: {args.device}", flush=True)
     model, tok = load(args.model, variant, args.device)
-    print("READY — 直接输入问题；exit 退出", flush=True)
+    print("READY — type a question; exit to quit", flush=True)
 
     if args.once:
         print(reply(model, tok, args.device, args.once, args.max_new))
@@ -110,7 +110,7 @@ def main():
 
     while True:
         try:
-            q = input("\n你> ").strip()
+            q = input("\nyou> ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nbye", flush=True)
             break
@@ -119,7 +119,7 @@ def main():
         if q.lower() in {"exit", "quit", "q"}:
             print("bye", flush=True)
             break
-        print("模型>", reply(model, tok, args.device, q, args.max_new), flush=True)
+        print("model>", reply(model, tok, args.device, q, args.max_new), flush=True)
 
 
 if __name__ == "__main__":
