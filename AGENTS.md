@@ -4,7 +4,7 @@ Instructions for coding agents working in this repository.
 
 ## Code style
 
-- 写代码不要写注释
+- Do not write code comments
 - Behavior updates use **full-weight checkpoints** (or routed full models), not LoRA/PEFT
 
 ## Delivery (Issue + PR + CI)

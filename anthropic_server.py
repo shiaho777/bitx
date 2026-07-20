@@ -112,7 +112,7 @@ class Engine:
                 continue
             msgs.append({"role": role, "content": text})
         if not msgs:
-            msgs = [{"role": "user", "content": "你好"}]
+            msgs = [{"role": "user", "content": "hello"}]
         return self.tok.apply_chat_template(
             msgs,
             tokenize=False,
@@ -473,7 +473,7 @@ def main():
     print(f"Device:     {args.device}", flush=True)
     print(f"Listen:  http://{args.host}:{args.port}", flush=True)
     print(f"API Key: {key}", flush=True)
-    print("Config:  Base URL = http://%s:%s   (不要写成 .../v1/messages)" % (args.host, args.port), flush=True)
+    print("Config:  Base URL = http://%s:%s   (do not append /v1/messages)" % (args.host, args.port), flush=True)
     print("Routes:  POST /v1/messages | POST /v1/chat/completions | GET /v1/models | GET /health", flush=True)
     print(f"KeyFile: {args.key_file}", flush=True)
     print(f"ModelId: {PUBLIC_MODEL_ID}", flush=True)
