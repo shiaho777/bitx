@@ -136,6 +136,53 @@ def cmd_diagnose(args):
     report(profile="tiny" if args.tiny else "full")
 
 
+def _split_csv(value):
+    if not value:
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _split_floats(value):
+    if value is None or value == "":
+        return None
+    return [float(part.strip()) for part in value.split(",") if part.strip()]
+
+
+def cmd_compose(args):
+    from kef import weight_compose as wc
+    method = args.compose_command
+    if method == "linear":
+        models = _split_csv(args.models)
+        if len(models) < 2:
+            raise SystemExit("linear needs at least two --models")
+        out = wc.compose_linear_paths(models, _split_floats(args.weights), args.out, template_dir=(args.template or None))
+        print(out)
+        return
+    if method == "task-vector":
+        models = _split_csv(args.models)
+        if not args.base or not models:
+            raise SystemExit("task-vector needs --base and --models")
+        out = wc.compose_task_vector_paths(args.base, models, _split_floats(args.lambdas), args.out)
+        print(out)
+        return
+    if method == "ties":
+        models = _split_csv(args.models)
+        if not args.base or not models:
+            raise SystemExit("ties needs --base and --models")
+        out = wc.compose_ties_paths(args.base, models, _split_floats(args.lambdas), args.out, density=args.density)
+        print(out)
+        return
+    if method == "stitch":
+        import json
+        with open(args.spec, encoding="utf-8") as f:
+            spec = json.load(f)
+        out = wc.compose_stitch_paths(spec, args.out)
+        print(out)
+        return
+    raise SystemExit(f"unknown compose method: {method}")
+
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         prog="kef", description="Knowledge-Externalization Framework CLI")
@@ -168,6 +215,37 @@ def build_parser():
 
     dg = sub.add_parser("diagnose", help="facts-vs-rules capacity probe")
     dg.add_argument("--tiny", action="store_true"); dg.set_defaults(func=cmd_diagnose)
+
+    comp = sub.add_parser("compose", help="full-weight merge / stitch (no LoRA)")
+    comp_sub = comp.add_subparsers(dest="compose_command", required=True)
+
+    lin = comp_sub.add_parser("linear", help="weighted average of full checkpoints")
+    lin.add_argument("--models", required=True, help="comma-separated checkpoint dirs")
+    lin.add_argument("--weights", default="", help="comma-separated weights, default equal")
+    lin.add_argument("--out", required=True)
+    lin.add_argument("--template", default="", help="copy tokenizer/config from this dir")
+    lin.set_defaults(func=cmd_compose)
+
+    tv = comp_sub.add_parser("task-vector", help="W_base + sum lambda*(W_i-W_base)")
+    tv.add_argument("--base", required=True)
+    tv.add_argument("--models", required=True, help="comma-separated variant dirs")
+    tv.add_argument("--lambdas", default="", help="comma-separated scales, default 1")
+    tv.add_argument("--out", required=True)
+    tv.set_defaults(func=cmd_compose)
+
+    ties = comp_sub.add_parser("ties", help="TIES-style trim + sign election merge")
+    ties.add_argument("--base", required=True)
+    ties.add_argument("--models", required=True)
+    ties.add_argument("--lambdas", default="")
+    ties.add_argument("--density", type=float, default=0.5)
+    ties.add_argument("--out", required=True)
+    ties.set_defaults(func=cmd_compose)
+
+    st = comp_sub.add_parser("stitch", help="layer/prefix stitch from a JSON spec")
+    st.add_argument("--spec", required=True, help="JSON with sources/rules/default")
+    st.add_argument("--out", required=True)
+    st.set_defaults(func=cmd_compose)
+
     return p
 
 
