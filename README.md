@@ -12,7 +12,9 @@ query → Encoder → FactStore
                  └ miss → ReasoningCore (full model generates / derives)
 ```
 
-Same-architecture weights can merge/stitch. Cross-architecture (e.g. Qwen body + GPT-2 knowledge) uses **routing / distillation / FactStore** — do not add tensors blindly. See [WEIGHT_COMPOSITION.md](WEIGHT_COMPOSITION.md).
+**Weight composition (full checkpoints, not LoRA):**
+- Same architecture: `python -m kef compose linear|task-vector|ties|stitch`
+- Cross architecture (e.g. Qwen body + GPT-2 knowledge): route, distill, or FactStore — do not add tensors blindly
 
 ## Results (gpt2-medium)
 
@@ -34,25 +36,23 @@ python -m bitx bench --task kef-edit-smoke
 
 python -m kef ask  "The capital of France is"
 python -m kef edit "The capital of France is" "Lyon"
-python -m kef ask  "The capital of France is"    # Lyon
-python -m kef ask  "The capital of Japan is"     # locality intact
+python -m kef ask  "The capital of France is"
+python -m kef ask  "The capital of Japan is"
 ```
 
-More benches: `python -m bitx bench --help`  
-Weight composition: `python -m kef compose linear|task-vector|ties|stitch --help`  
-Local chat / API: `python chat_model.py` · `./start_api.sh`
+More: `python -m bitx bench --help` · `python -m kef compose --help` · `python chat_model.py` · `./start_api.sh`
 
 ## Layout
 
 | path | what |
 |------|------|
-| `kef/` | FactStore, core, compose, training/routing scripts |
+| `kef/` | FactStore, core, compose, training/routing |
 | `bitx/` | benchmark contract |
 | `tests/` | unit tests |
-| `WEIGHT_COMPOSITION.md` | full-weight cut / merge |
-| `NORTH_STAR.md` · `ROADMAP.md` · `LIMITATIONS.md` | goal / plan / bounds |
+| `AGENTS.md` | coding agents |
+| `CONTRIBUTING.md` | humans |
 
 ## Contributing
 
-Issue → PR → `main` → **CI / test** green → merge (`Fixes #N` closes the Issue).  
+Issue → PR → `main` → **CI / test** green → merge (`Fixes #N`).  
 [CONTRIBUTING.md](CONTRIBUTING.md) · [AGENTS.md](AGENTS.md)
