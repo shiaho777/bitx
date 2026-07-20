@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import torch
-from peft import PeftModel
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.eng_craft import eval_eng
 from kef.folk_logic import Sample, collate, eval_controls, make_gen
@@ -448,8 +448,8 @@ def train(args):
     base = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, trust_remote_code=True)
     base.to(device)
     base.config.use_cache = False
-    model = PeftModel.from_pretrained(base, args.resume, is_trainable=True)
-    model.print_trainable_parameters()
+    model = load_causal_lm(args.resume or args.model, device=device, trainable=True)
+    print_trainable(model)
 
     ds = ChatDS(samples, tok, max_len=args.max_len, answer_boost=2.8)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
@@ -546,15 +546,13 @@ def train(args):
         and ctrl1["accuracy"] + 1e-9 >= ctrl_floor
     )
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     if promote:
-        model.save_pretrained(out / "adapter_best")
-        tok.save_pretrained(out / "adapter_best")
+        save_checkpoint(model, tok, out / "model_best")
         champ = Path(args.champion)
-        dst = champ / "adapter_best"
+        dst = champ / "model_best"
         dst.mkdir(parents=True, exist_ok=True)
-        for f in (out / "adapter_best").iterdir():
+        for f in (out / "model_best").iterdir():
             if f.is_file():
                 shutil.copy2(f, dst / f.name)
         print("PROMOTED unify_fix -> unified_champion", flush=True)
@@ -597,7 +595,7 @@ def train(args):
             json.dump(
                 {
                     "method": "unified_champion",
-                    "source": str(out / "adapter_best"),
+                    "source": str(out / "model_best"),
                     "policy": "single_model_single_adapter_default",
                     "metrics": report["after"],
                     "fix_round": report,
@@ -615,7 +613,7 @@ def train(args):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/unified_champion/adapter_best")
+    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/unified_champion/model_best")
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/unify_fix_v1")
     p.add_argument("--champion", default="/Users/shiaho/Desktop/bitx/kef_results/unified_champion")
     p.add_argument("--n-train", type=int, default=240)

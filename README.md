@@ -8,7 +8,7 @@
 
 KEF is the research core of BitX. The larger target is not a demo and not a
 single-domain trick: BitX aims to become an open local intelligence stack that
-combines editable external knowledge, adapter-based behavior updates, calibrated
+combines editable external knowledge, full-weight behavior variants, calibrated
 mixed-precision runtime, and reproducible quality gates.
 
 Read [NORTH_STAR.md](NORTH_STAR.md) for the end state and [ROADMAP.md](ROADMAP.md)

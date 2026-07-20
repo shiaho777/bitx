@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
-from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.eng_craft import ENG_HARD_PROBES, ENG_PROBES, eval_eng, score_eng
 from kef.folk_logic import eval_controls, make_gen
@@ -64,15 +64,9 @@ def route_name(prompt: str) -> str:
 
 
 def load_gen(model_path: str, adapter: str, device: str):
-    dtype = torch.float16 if device == "mps" else torch.float32
-    tok = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    base = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
-    base.to(device)
-    model = PeftModel.from_pretrained(base, adapter) if adapter else base
-    gen = make_gen(model, tok, device)
-    return gen, model, tok
+    path = resolve_checkpoint(model_path, adapter)
+    model, tok = load_model_and_tokenizer(path, device=device, trainable=False)
+    return make_gen(model, tok, device), model, tok
 
 
 def adapter_for_route(args, name: str) -> str:
@@ -222,13 +216,13 @@ def install_bundle(args, report: Optional[Dict]):
         s = Path(src)
         if not s.exists():
             return ""
-        # accept either adapter dir or parent with adapter_best/last
+        # accept either adapter dir or parent with model_best/last
         if (s / "adapter_model.safetensors").exists():
             src_dir = s
-        elif (s / "adapter_best").exists():
-            src_dir = s / "adapter_best"
-        elif (s / "adapter_last").exists():
-            src_dir = s / "adapter_last"
+        elif (s / "model_best").exists():
+            src_dir = s / "model_best"
+        elif (s / "model_last").exists():
+            src_dir = s / "model_last"
         else:
             src_dir = s
         dst = root / name
@@ -257,7 +251,7 @@ def install_bundle(args, report: Optional[Dict]):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/eng_craft_champion/adapter_best")
+    p.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/eng_craft_champion/model_best")
     p.add_argument("--fe-expert", default="")
     p.add_argument("--be-expert", default="")
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/eng_multi_route")

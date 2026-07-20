@@ -11,7 +11,7 @@ Build `bitx bench` or an equivalent script that records JSONL results with:
 - model id
 - backend
 - quantization recipe
-- adapter id
+- variant / checkpoint id (`adapter_id` field kept for contract stability)
 - task name
 - prompt count
 - raw predictions path
@@ -122,10 +122,10 @@ Compare against:
 - fine-tuned edit
 - unedited base
 
-## 5. Preserve Adapter Discipline
+## 5. Preserve Weight-Variant Discipline
 
-The persona and reasoning LoRA experiments already contain a useful instinct:
-never accept an adapter without damage controls.
+The persona and reasoning full-weight experiments already contain a useful instinct:
+never accept a behavior variant without damage controls.
 
 Turn this into a reusable gate:
 
@@ -141,7 +141,7 @@ Current foothold:
 known answers, math problems, verbosity ratio, and over-refusal rate. The
 `adapter-gate-smoke` benchmark task proves all five gate criteria work with
 deterministic generate functions. The next step is connecting the gate to a
-real LoRA training loop and running it under AdapterGate acceptance criteria.
+real full-weight training loop and running it under AdapterGate acceptance criteria.
 
 ## 6. Phase 1 Expansion: Held-Out Ambiguity Core
 

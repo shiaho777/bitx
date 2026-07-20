@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import torch
-from peft import LoraConfig, PeftModel, get_peft_model
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.adapter_gate import AdapterGate, GateControls, save_gate_result, save_health_curve
 from kef.char_guardrails import validate_train_batch, FORBIDDEN_RECIPES
@@ -580,13 +580,12 @@ def train(
     n_heldout: int = 40,
     epochs: int = 2,
     lr: float = 5e-5,
-    lora_r: int = 16,
     batch_size: int = 1,
     grad_accum: int = 8,
     max_len: int = 640,
     seed: int = 17,
     device: Optional[str] = None,
-    resume_adapter: Optional[str] = None,
+    resume: Optional[str] = None,
 ) -> Dict:
     random.seed(seed)
     torch.manual_seed(seed)
@@ -625,20 +624,12 @@ def train(
     model.to(device)
     model.config.use_cache = False
 
-    if resume_adapter:
-        print(f"resume adapter from {resume_adapter}", flush=True)
-        model = PeftModel.from_pretrained(model, resume_adapter, is_trainable=True)
+    if resume:
+        print(f"resume adapter from {resume}", flush=True)
+        model = load_causal_lm(resume or model_path, device=device, trainable=True)
     else:
-        lora = LoraConfig(
-            r=lora_r,
-            lora_alpha=lora_r * 2,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        )
-        model = get_peft_model(model, lora)
-    model.print_trainable_parameters()
+        model = load_causal_lm(args.model, device=device, trainable=True)
+    print_trainable(model)
 
     ds = ChatSftDataset(train_samples, tokenizer, max_len=max_len)
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
@@ -729,11 +720,10 @@ def train(
                 "consistency": held["consistency"],
                 "control_acc": ctrl["accuracy"],
                 "epoch": epoch,
-                "path": str(out / "adapter_best"),
+                "path": str(out / "model_best"),
                 "rank": rank,
             }
-            model.save_pretrained(out / "adapter_best")
-            tokenizer.save_pretrained(out / "adapter_best")
+            save_checkpoint(model, tokenizer, out / "model_best")
             print(f"saved best epoch={epoch} rank={rank:.3f}", flush=True)
 
         if held["accuracy"] >= 0.75 and held["consistency"] >= 0.6 and ctrl["accuracy"] >= 0.8:
@@ -743,8 +733,7 @@ def train(
             print("early stop: loss collapsed without real heldout gain", flush=True)
             break
 
-    model.save_pretrained(out / "adapter_last")
-    tokenizer.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tokenizer, out / "model_last")
     save_health_curve(str(out / "health_curve.jsonl"), health_curve)
 
     if best["path"] and Path(best["path"]).exists():
@@ -753,7 +742,7 @@ def train(
             torch.mps.empty_cache()
         base = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
         base.to(device)
-        model = PeftModel.from_pretrained(base, best["path"])
+        model = load_causal_lm(best["path"], device=device, trainable=False)
         model.eval()
 
     adapted_gen = make_generate_fn(model, tokenizer, device)
@@ -781,7 +770,6 @@ def train(
         "method": "weight_only_cot_lora_v6_natural_from_base",
         "n_train": len(train_samples),
         "n_heldout": len(held_samples),
-        "lora_r": lora_r,
         "lr": lr,
         "epochs_ran": len(health_curve),
         "baseline_heldout_acc": baseline["accuracy"],
@@ -833,13 +821,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--n-heldout", type=int, default=40)
     p.add_argument("--epochs", type=int, default=2)
     p.add_argument("--lr", type=float, default=5e-5)
-    p.add_argument("--lora-r", type=int, default=16)
     p.add_argument("--batch-size", type=int, default=1)
     p.add_argument("--grad-accum", type=int, default=8)
     p.add_argument("--max-len", type=int, default=640)
     p.add_argument("--seed", type=int, default=17)
     p.add_argument("--device", default=None)
-    p.add_argument("--resume-adapter", default=None)
+    p.add_argument("--resume", default=None)
     args = p.parse_args(argv)
     train(
         model_path=args.model,
@@ -848,13 +835,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         n_heldout=args.n_heldout,
         epochs=args.epochs,
         lr=args.lr,
-        lora_r=args.lora_r,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
         max_len=args.max_len,
         seed=args.seed,
         device=args.device,
-        resume_adapter=args.resume_adapter,
+        resume=args.resume,
     )
     return 0
 

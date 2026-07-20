@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
-from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.folk_logic import eval_controls, make_gen
 from kef.logic_core import LOGIC_PROBES, eval_logic, match_logic, first_answer_line
@@ -123,13 +123,8 @@ def _free_mps():
 
 
 def load_gen(model_path: str, adapter: str, device: str):
-    dtype = torch.float16 if device == "mps" else torch.float32
-    tok = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    base = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
-    base.to(device)
-    model = PeftModel.from_pretrained(base, adapter) if adapter else base
+    path = resolve_checkpoint(model_path, adapter)
+    model, tok = load_model_and_tokenizer(path, device=device, trainable=False)
     return make_gen(model, tok, device), model, tok
 
 

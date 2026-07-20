@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
 import torch
-from peft import LoraConfig, PeftModel, get_peft_model
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.folk_logic import CTRL_PROBES, Sample, collate, eval_controls, make_gen
 
@@ -987,18 +987,10 @@ def train(args):
     base.config.use_cache = False
 
     if args.resume:
-        model = PeftModel.from_pretrained(base, args.resume, is_trainable=True)
+        model = load_causal_lm(args.resume or args.model, device=device, trainable=True)
     else:
-        lora = LoraConfig(
-            r=args.lora_r,
-            lora_alpha=args.lora_r * 2,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        )
-        model = get_peft_model(base, lora)
-    model.print_trainable_parameters()
+        model = load_causal_lm(args.model, device=device, trainable=True)
+    print_trainable(model)
 
     answer_boost = 3.0
     ds = ChatDS(samples, tok, max_len=args.max_len, answer_boost=answer_boost)
@@ -1100,11 +1092,9 @@ def train(args):
         and rep1 <= rep0
     )
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     if promote:
-        model.save_pretrained(out / "adapter_best")
-        tok.save_pretrained(out / "adapter_best")
+        save_checkpoint(model, tok, out / "model_best")
         print("PROMOTED eng_craft", flush=True)
     else:
         print(
@@ -1117,7 +1107,6 @@ def train(args):
         "n_train": len(samples),
         "kinds": kind_counts,
         "lr": args.lr,
-        "lora_r": args.lora_r,
         "epochs": epochs,
         "resume": args.resume,
         "baseline": {"eng": eng0["accuracy"], "ctrl": ctrl0["accuracy"], "kind_acc": eng0["kind_acc"]},
@@ -1148,7 +1137,6 @@ def main():
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/eng_craft_v1")
     p.add_argument("--n-train", type=int, default=280)
     p.add_argument("--lr", type=float, default=1.5e-5)
-    p.add_argument("--lora-r", type=int, default=16)
     p.add_argument("--max-len", type=int, default=768)
     p.add_argument("--grad-accum", type=int, default=8)
     p.add_argument("--seed", type=int, default=42)
@@ -1164,7 +1152,7 @@ def main():
             tok.pad_token = tok.eos_token
         base = AutoModelForCausalLM.from_pretrained(args.model, dtype=dtype, trust_remote_code=True)
         base.to(device)
-        model = PeftModel.from_pretrained(base, args.resume) if args.resume else base
+        model = load_causal_lm(args.resume if args.resume else args.model, device=device, trainable=False)
         gen = make_gen(model, tok, device)
         eng = eval_eng(gen)
         ctrl = eval_controls(gen)

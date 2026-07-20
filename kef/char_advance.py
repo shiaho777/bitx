@@ -1,4 +1,4 @@
-"""Advanced pure-weight char CoT: hard expert, LoRA merge, self-distill, evaluate."""
+"""Advanced pure-weight char CoT: hard expert, full-weight fine-tune merge, self-distill, evaluate."""
 
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
-from peft import LoraConfig, PeftModel, get_peft_model
 from safetensors.torch import load_file, save_file
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 from kef.char_guardrails import (
     CORE_PROBES,
@@ -358,26 +358,18 @@ def classic_words_for(probes):
     return words
 
 
-def load_model(model_path: str, adapter: Optional[str], device: str, trainable: bool = False):
-    tok = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    if tok.pad_token is None:
-        tok.pad_token = tok.eos_token
-    dtype = torch.float16 if device == "mps" else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
-    model.to(device)
-    if adapter:
-        model = PeftModel.from_pretrained(model, adapter, is_trainable=trainable)
-    return model, tok
+def load_model(model_path: str, variant: Optional[str], device: str, trainable: bool = False):
+    path = resolve_checkpoint(model_path, variant)
+    return load_model_and_tokenizer(path, device=device, trainable=trainable)
 
 
-def train_lora(
+def train_full(
     model_path: str,
     out_dir: str,
     samples: List[Sample],
-    resume_adapter: Optional[str] = None,
+    resume: Optional[str] = None,
     epochs: int = 1,
     lr: float = 5e-5,
-    lora_r: int = 16,
     device: str = "mps",
     seed: int = 7,
     max_len: int = 560,
@@ -393,18 +385,10 @@ def train_lora(
             f.write(json.dumps(asdict(s), ensure_ascii=False) + "\n")
     validate_train_batch([s.answer for s in samples])
 
-    model, tok = load_model(model_path, resume_adapter, device, trainable=bool(resume_adapter))
-    if not resume_adapter:
-        cfg = LoraConfig(
-            r=lora_r,
-            lora_alpha=lora_r * 2,
-            lora_dropout=0.05,
-            bias="none",
-            task_type="CAUSAL_LM",
-            target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        )
-        model = get_peft_model(model, cfg)
-    model.print_trainable_parameters()
+    model, tok = load_model(model_path, resume, device, trainable=bool(resume))
+    if not resume:
+        model = load_causal_lm(args.model, device=device, trainable=True)
+    print_trainable(model)
     ds = ChatDS(samples, tok, max_len=max_len)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
     gen = make_gen(model, tok, device)
@@ -424,8 +408,7 @@ def train_lora(
         json.dump({"core": base_core, "hard": base_hard, "all": base_all, "ctrl": base_ctrl}, f, ensure_ascii=False, indent=2)
 
     # seed best with resume/base snapshot of current adapter state after optional resume
-    model.save_pretrained(out / "adapter_best")
-    tok.save_pretrained(out / "adapter_best")
+    save_checkpoint(model, tok, out / "model_best")
     best = {
         "core": base_core["accuracy"],
         "classic": base_all["accuracy"],
@@ -502,8 +485,7 @@ def train_lora(
             allp["accuracy"] > best["classic"] + 1e-9 or core["accuracy"] > best["core"] + 1e-9 or hard_gain
         ):
             if core["accuracy"] + 1e-9 >= base_core["accuracy"] and ctrl["accuracy"] >= 0.66:
-                model.save_pretrained(out / "adapter_best")
-                tok.save_pretrained(out / "adapter_best")
+                save_checkpoint(model, tok, out / "model_best")
                 best = {
                     "core": core["accuracy"],
                     "classic": allp["accuracy"],
@@ -518,12 +500,11 @@ def train_lora(
         else:
             print(f"[{tag}] no promote {dec.reasons}", flush=True)
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     report = {
         "tag": tag,
         "model_path": model_path,
-        "resume_adapter": resume_adapter,
+        "resume": resume,
         "n_train": len(samples),
         "epochs": epochs,
         "lr": lr,
@@ -542,7 +523,7 @@ def train_lora(
 
 
 def merge_lora_dirs(adapter_a: str, adapter_b: str, out_dir: str, alpha: float = 0.55) -> str:
-    """Linear merge of two PEFT LoRA adapters: out = alpha*A + (1-alpha)*B."""
+    """Linear merge of two PEFT full-weight fine-tune adapters: out = alpha*A + (1-alpha)*B."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     a_dir = Path(adapter_a)
@@ -736,11 +717,11 @@ def eval_routed(model_path: str, core_adapter: str, expert_adapter: str, device:
 
 def cmd_expert(args):
     samples = build_expert_dataset(args.n_train, args.seed)
-    return train_lora(
+    return train_full(
         model_path=args.model,
         out_dir=args.out,
         samples=samples,
-        resume_adapter=None,
+        resume=None,
         epochs=args.epochs,
         lr=args.lr,
         device=args.device,
@@ -767,11 +748,11 @@ def cmd_distill_collect(args):
 
 def cmd_distill_train(args):
     samples = load_samples(args.data)
-    return train_lora(
+    return train_full(
         model_path=args.model,
         out_dir=args.out,
         samples=samples,
-        resume_adapter=None,
+        resume=None,
         epochs=args.epochs,
         lr=args.lr,
         device=args.device,
@@ -795,23 +776,23 @@ def cmd_pipeline(args):
     # 1) hard expert from base
     expert_out = str(root / "hard_expert")
     samples = build_expert_dataset(args.n_expert, args.seed)
-    train_lora(args.model, expert_out, samples, None, args.epochs_expert, args.lr_expert, device=args.device, seed=args.seed, tag="hard_expert")
+    train_full(args.model, expert_out, samples, None, args.epochs_expert, args.lr_expert, device=args.device, seed=args.seed, tag="hard_expert")
     # 2) merge with v3
     merge_out = str(root / "merged_v3_expert")
-    merge_lora_dirs(v3, str(Path(expert_out) / "adapter_best"), merge_out, alpha=args.merge_alpha)
+    merge_lora_dirs(v3, str(Path(expert_out) / "model_best"), merge_out, alpha=args.merge_alpha)
     # 3) self-distill collect from v3
     distill_jsonl = str(root / "distill" / "traces.jsonl")
     distill_collect(args.model, v3, distill_jsonl, n_synth=args.n_synth, seed=args.seed + 1, device=args.device)
     # 4) retrain from base on distill
     distill_out = str(root / "distill_model")
     d_samples = load_samples(distill_jsonl)
-    train_lora(args.model, distill_out, d_samples, None, args.epochs_distill, args.lr_distill, device=args.device, seed=args.seed + 2, tag="distill_retrain")
+    train_full(args.model, distill_out, d_samples, None, args.epochs_distill, args.lr_distill, device=args.device, seed=args.seed + 2, tag="distill_retrain")
     # 5) eval all
     adapters = {
         "v3": v3,
-        "hard_expert": str(Path(expert_out) / "adapter_best"),
+        "hard_expert": str(Path(expert_out) / "model_best"),
         "merged": merge_out,
-        "distill": str(Path(distill_out) / "adapter_best"),
+        "distill": str(Path(distill_out) / "model_best"),
     }
     report = eval_adapters(args.model, adapters, args.device, str(root / "compare.json"))
     # promote best under gates vs v3
@@ -861,7 +842,7 @@ def main(argv=None):
 
     pdc = sub.add_parser("distill-collect")
     pdc.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    pdc.add_argument("--teacher", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/adapter_best")
+    pdc.add_argument("--teacher", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
     pdc.add_argument("--out", default="kef_results/char_distill/traces.jsonl")
     pdc.add_argument("--n-synth", type=int, default=400)
     pdc.add_argument("--min-fid", type=float, default=0.75)
@@ -879,8 +860,8 @@ def main(argv=None):
 
     pr = sub.add_parser("route-eval")
     pr.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    pr.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/adapter_best")
-    pr.add_argument("--expert", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert/adapter_best")
+    pr.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
+    pr.add_argument("--expert", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert/model_best")
     pr.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/route_eval.json")
     pr.add_argument("--device", default="mps")
 
@@ -892,7 +873,7 @@ def main(argv=None):
 
     pp = sub.add_parser("pipeline")
     pp.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    pp.add_argument("--core-adapter", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/adapter_best")
+    pp.add_argument("--core-adapter", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
     pp.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance")
     pp.add_argument("--n-expert", type=int, default=500)
     pp.add_argument("--epochs-expert", type=int, default=1)

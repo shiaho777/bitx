@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import torch
-from peft import PeftModel
 from torch.utils.data import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from kef.weights import load_causal_lm, load_model_and_tokenizer, load_tokenizer, print_trainable, resolve_checkpoint, save_checkpoint
 
 BANNED = {
     "strawberry", "blueberry", "raspberry", "blackberry", "cranberry",
@@ -374,7 +374,7 @@ def evaluate_controls(gen) -> Dict:
 def train(
     model_path: str,
     out_dir: str,
-    resume_adapter: str,
+    resume: str,
     n_train: int = 280,
     epochs: int = 1,
     lr: float = 4e-6,
@@ -404,9 +404,9 @@ def train(
     dtype = torch.float16 if device == "mps" else torch.float32
     model = AutoModelForCausalLM.from_pretrained(model_path, dtype=dtype, trust_remote_code=True)
     model.to(device)
-    print(f"resume {resume_adapter}", flush=True)
-    model = PeftModel.from_pretrained(model, resume_adapter, is_trainable=True)
-    model.print_trainable_parameters()
+    print(f"resume {resume}", flush=True)
+    model = load_causal_lm(resume or model_path, device=device, trainable=True)
+    print_trainable(model)
 
     ds = ChatDS(train_s, tok, max_len=max_len)
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
@@ -425,7 +425,7 @@ def train(
 
     best_rank = baseline["accuracy"] + 0.25 * baseline["fidelity"] + 0.2 * base_ctrl["accuracy"]
     best = {"rank": best_rank, "epoch": 0, "from_resume": True}
-    shutil.copytree(resume_adapter, out / "adapter_best", dirs_exist_ok=True)
+    shutil.copytree(resume, out / "model_best", dirs_exist_ok=True)
     health = []
     t0 = time.perf_counter()
 
@@ -493,8 +493,7 @@ def train(
         base_core = sum(1 for r in baseline["rows"] if r["q"] in core_qs and r["ok"])
         if rank > best["rank"] + 1e-6 and core_ok >= base_core and ctrl["accuracy"] >= 0.8:
             best = {"rank": rank, "epoch": epoch, "from_resume": False}
-            model.save_pretrained(out / "adapter_best")
-            tok.save_pretrained(out / "adapter_best")
+            save_checkpoint(model, tok, out / "model_best")
             print(f"saved best epoch={epoch} rank={rank:.3f} core={core_ok}/{base_core}", flush=True)
         else:
             print(
@@ -502,11 +501,10 @@ def train(
                 flush=True,
             )
 
-    model.save_pretrained(out / "adapter_last")
-    tok.save_pretrained(out / "adapter_last")
+    save_checkpoint(model, tok, out / "model_last")
     report = {
         "method": "surgical_fix_v2_natural_v3_format",
-        "resume_adapter": resume_adapter,
+        "resume": resume,
         "n_train": len(train_s),
         "epochs": epochs,
         "lr": lr,
@@ -530,7 +528,7 @@ def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
     p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_fix_v2")
-    p.add_argument("--resume-adapter", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/adapter_best")
+    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
     p.add_argument("--n-train", type=int, default=280)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--lr", type=float, default=4e-6)
@@ -540,7 +538,7 @@ def main(argv=None):
     train(
         model_path=args.model,
         out_dir=args.out,
-        resume_adapter=args.resume_adapter,
+        resume=args.resume,
         n_train=args.n_train,
         epochs=args.epochs,
         lr=args.lr,
