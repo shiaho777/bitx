@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kef.paths import default_model, repo_root, result_path
+from kef.paths import default_model
 
 import argparse
 import json
