@@ -1,10 +1,9 @@
 """Unit tests for FactStore (Requirements 2, 3.3, 3.5, 6.4)."""
+import os
 import warnings
-import torch
 import tempfile
 
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import torch
 
 from kef.factstore import FactStore, FactConflictWarning
 

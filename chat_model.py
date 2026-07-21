@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from kef.paths import default_model
+
 import argparse
 
 from kef.weights import load_model_and_tokenizer, resolve_checkpoint
 
 
-DEFAULT_MODEL = "/Users/shiaho/Desktop/MiniCPM5-1B"
+DEFAULT_MODEL = default_model()
 DEFAULT_VARIANT = ""
 
 

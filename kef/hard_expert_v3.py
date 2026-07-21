@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import random
@@ -456,10 +458,10 @@ def train(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert_v2/model_best")
-    p.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
-    p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert_v3")
+    p.add_argument("--model", default=default_model())
+    p.add_argument("--resume", default=result_path('char_advance', 'hard_expert_v2', 'model_best'))
+    p.add_argument("--core", default=result_path('char_sense_cot_v3', 'model_best'))
+    p.add_argument("--out", default=result_path('char_advance', 'hard_expert_v3'))
     p.add_argument("--n-train", type=int, default=200)
     p.add_argument("--lr", type=float, default=1.5e-5)
     p.add_argument("--max-len", type=int, default=520)

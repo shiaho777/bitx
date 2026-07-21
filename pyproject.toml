@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitx"
+version = "0.1.0"
+description = "BitX / KEF — editable external knowledge + full-weight local intelligence"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "torch",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+serve = ["fastapi", "uvicorn", "transformers", "pydantic"]
+train = ["transformers", "accelerate"]
+
+[tool.setuptools.packages.find]
+include = ["kef*", "bitx*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

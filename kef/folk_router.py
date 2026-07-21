@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import re
@@ -384,14 +386,14 @@ def install_champion_bundle(args, report: Optional[Dict] = None) -> None:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
+    p.add_argument("--model", default=default_model())
     p.add_argument(
         "--core",
-        default="/Users/shiaho/Desktop/bitx/kef_results/folk_logic_dual/core_adapter",
+        default=result_path('folk_logic_dual', 'core_adapter'),
     )
     p.add_argument(
         "--expert",
-        default="/Users/shiaho/Desktop/bitx/kef_results/folk_logic_dual/expert_adapter",
+        default=result_path('folk_logic_dual', 'expert_adapter'),
     )
     p.add_argument(
         "--riddle-expert",
@@ -405,11 +407,11 @@ def main():
     )
     p.add_argument(
         "--out",
-        default="/Users/shiaho/Desktop/bitx/kef_results/folk_logic_dual/route_eval_multi.json",
+        default=result_path('folk_logic_dual', 'route_eval_multi.json'),
     )
     p.add_argument(
         "--bundle",
-        default="/Users/shiaho/Desktop/bitx/kef_results/folk_logic_dual",
+        default=result_path('folk_logic_dual'),
     )
     p.add_argument("--device", default="mps")
     p.add_argument("--install-bundle", action="store_true")

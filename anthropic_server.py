@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from kef.paths import default_model, result_path
+
 import argparse
 import json
 import os
@@ -19,9 +21,9 @@ from pydantic import BaseModel, Field
 from kef.weights import load_model_and_tokenizer, resolve_checkpoint
 
 
-DEFAULT_MODEL = "/Users/shiaho/Desktop/MiniCPM5-1B"
+DEFAULT_MODEL = default_model()
 DEFAULT_VARIANT = ""
-DEFAULT_KEY_FILE = Path("/Users/shiaho/Desktop/bitx/kef_results/local_api_key.txt")
+DEFAULT_KEY_FILE = Path(result_path('local_api_key.txt'))
 PUBLIC_MODEL_ID = "bitx-minicpm5-1b"
 
 
