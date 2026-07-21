@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import random
@@ -1132,9 +1134,9 @@ def train(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
+    p.add_argument("--model", default=default_model())
     p.add_argument("--resume", default="")
-    p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/eng_craft_v1")
+    p.add_argument("--out", default=result_path('eng_craft_v1'))
     p.add_argument("--n-train", type=int, default=280)
     p.add_argument("--lr", type=float, default=1.5e-5)
     p.add_argument("--max-len", type=int, default=768)

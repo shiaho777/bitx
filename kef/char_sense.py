@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import random
@@ -815,7 +817,7 @@ def train(
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
+    p.add_argument("--model", default=default_model())
     p.add_argument("--out", default="kef_results/char_sense_cot_v4")
     p.add_argument("--n-train", type=int, default=1100)
     p.add_argument("--n-heldout", type=int, default=40)

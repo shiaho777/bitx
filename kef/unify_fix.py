@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import random
@@ -612,10 +614,10 @@ def train(args):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/unified_champion/model_best")
-    p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/unify_fix_v1")
-    p.add_argument("--champion", default="/Users/shiaho/Desktop/bitx/kef_results/unified_champion")
+    p.add_argument("--model", default=default_model())
+    p.add_argument("--resume", default=result_path('unified_champion', 'model_best'))
+    p.add_argument("--out", default=result_path('unify_fix_v1'))
+    p.add_argument("--champion", default=result_path('unified_champion'))
     p.add_argument("--n-train", type=int, default=240)
     p.add_argument("--lr", type=float, default=1.2e-5)
     p.add_argument("--max-len", type=int, default=512)

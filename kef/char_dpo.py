@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import math
@@ -438,9 +440,9 @@ def train(
 
 def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_dpo_v1")
-    p.add_argument("--resume", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
+    p.add_argument("--model", default=default_model())
+    p.add_argument("--out", default=result_path('char_dpo_v1'))
+    p.add_argument("--resume", default=result_path('char_sense_cot_v3', 'model_best'))
     p.add_argument("--steps", type=int, default=120)
     p.add_argument("--lr", type=float, default=2e-6)
     p.add_argument("--beta", type=float, default=0.1)

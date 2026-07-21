@@ -27,6 +27,9 @@ Fine-tuning one fact damaged half the neighbors; external edit touched exactly o
 
 ## Quick start
 
+Optional env: `BITX_MODEL` (full-weight checkpoint), `BITX_RESULTS` (default `./kef_results`).
+
+
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest -q

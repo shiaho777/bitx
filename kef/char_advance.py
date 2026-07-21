@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import random
@@ -826,7 +828,7 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pe = sub.add_parser("expert")
-    pe.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
+    pe.add_argument("--model", default=default_model())
     pe.add_argument("--out", default="/kef_results/char_hard_expert")
     pe.add_argument("--n-train", type=int, default=500)
     pe.add_argument("--epochs", type=int, default=1)
@@ -841,8 +843,8 @@ def main(argv=None):
     pm.add_argument("--alpha", type=float, default=0.55)
 
     pdc = sub.add_parser("distill-collect")
-    pdc.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    pdc.add_argument("--teacher", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
+    pdc.add_argument("--model", default=default_model())
+    pdc.add_argument("--teacher", default=result_path('char_sense_cot_v3', 'model_best'))
     pdc.add_argument("--out", default="kef_results/char_distill/traces.jsonl")
     pdc.add_argument("--n-synth", type=int, default=400)
     pdc.add_argument("--min-fid", type=float, default=0.75)
@@ -850,7 +852,7 @@ def main(argv=None):
     pdc.add_argument("--device", default="mps")
 
     pdt = sub.add_parser("distill-train")
-    pdt.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
+    pdt.add_argument("--model", default=default_model())
     pdt.add_argument("--data", required=True)
     pdt.add_argument("--out", default="kef_results/char_distill_model")
     pdt.add_argument("--epochs", type=int, default=1)
@@ -859,22 +861,22 @@ def main(argv=None):
     pdt.add_argument("--device", default="mps")
 
     pr = sub.add_parser("route-eval")
-    pr.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    pr.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
-    pr.add_argument("--expert", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/hard_expert/model_best")
-    pr.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance/route_eval.json")
+    pr.add_argument("--model", default=default_model())
+    pr.add_argument("--core", default=result_path('char_sense_cot_v3', 'model_best'))
+    pr.add_argument("--expert", default=result_path('char_advance', 'hard_expert', 'model_best'))
+    pr.add_argument("--out", default=result_path('char_advance', 'route_eval.json'))
     pr.add_argument("--device", default="mps")
 
     pev = sub.add_parser("eval")
-    pev.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
+    pev.add_argument("--model", default=default_model())
     pev.add_argument("--adapters", nargs="+", required=True, help="name=path")
     pev.add_argument("--out", default="kef_results/char_advance_eval.json")
     pev.add_argument("--device", default="mps")
 
     pp = sub.add_parser("pipeline")
-    pp.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    pp.add_argument("--core-adapter", default="/Users/shiaho/Desktop/bitx/kef_results/char_sense_cot_v3/model_best")
-    pp.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/char_advance")
+    pp.add_argument("--model", default=default_model())
+    pp.add_argument("--core-adapter", default=result_path('char_sense_cot_v3', 'model_best'))
+    pp.add_argument("--out", default=result_path('char_advance'))
     pp.add_argument("--n-expert", type=int, default=500)
     pp.add_argument("--epochs-expert", type=int, default=1)
     pp.add_argument("--lr-expert", type=float, default=5e-5)

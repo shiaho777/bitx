@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from kef.paths import default_model, repo_root, result_path
+
 import argparse
 import json
 import shutil
@@ -364,14 +366,14 @@ def install_bundle(args, report: Optional[Dict] = None) -> None:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", default="/Users/shiaho/Desktop/MiniCPM5-1B")
-    p.add_argument("--core", default="/Users/shiaho/Desktop/bitx/kef_results/logic_core_champion")
+    p.add_argument("--model", default=default_model())
+    p.add_argument("--core", default=result_path('logic_core_champion'))
     p.add_argument("--mt-expert", default="")
     p.add_argument("--nec-expert", default="")
     p.add_argument("--repair-expert", default="")
     p.add_argument("--puzzle-expert", default="")
-    p.add_argument("--out", default="/Users/shiaho/Desktop/bitx/kef_results/logic_multi_route")
-    p.add_argument("--bundle", default="/Users/shiaho/Desktop/bitx/kef_results/logic_multi_dual")
+    p.add_argument("--out", default=result_path('logic_multi_route'))
+    p.add_argument("--bundle", default=result_path('logic_multi_dual'))
     p.add_argument("--device", default="mps")
     p.add_argument("--text-route", action="store_true")
     p.add_argument("--fast", action="store_true")

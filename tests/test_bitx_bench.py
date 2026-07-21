@@ -1,11 +1,8 @@
 import json
 import os
-import sys
 import tempfile
 
 import torch
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bitx.bench import append_record, append_records, load_semantic_ambiguity_scenarios, load_suite_facts, routed_rows, run_benchmark, run_edit_suite_with_vectors, run_semantic_rerank_smoke, semantic_ambiguity_suite_path, suite_data_path
 from bitx.backends import DeterministicBackend, LlamaCppBackend, LlamaCppServerBackend, LlamaCppTools
